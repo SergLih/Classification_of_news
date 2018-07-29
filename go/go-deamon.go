@@ -60,7 +60,7 @@ func ReadMatrix(file string) (*mat.Dense, error) {
 }
 
 func LoadParameters() error {
-    // ПЫТАЕМСЯ ПРОЧЕСТЬ МОДЭЛЬ
+    // ПЫТАЕМСЯ ПРОЧЕСТЬ МОДЕЛЬ
     if words, err = ReadWords(WORDLIST); err != nil { 
         return errors.New("Ошибка загрузки списка слов!\n" + err.Error())
     }  
@@ -109,7 +109,7 @@ func WriteStringToFile(file string, content string, append_mode bool) {
 
 func ClientConns(listener net.Listener) chan net.Conn {
     ch := make(chan net.Conn)
-    i := 0  //счётчик входящих соединений
+    i := 0
     go func() { //запускаем горутину
         for { 
             //Accept - принимает соединение
@@ -135,29 +135,27 @@ func HandleConn(client net.Conn) {
     for {
         line, err := b.ReadString('\n')
         if err != nil { // EOF, or worse
-            SendToClient("Error")
+            SendToClient("ERROR\n")
             break
         }
         //fmt.Printf("%T - %v, %T - %v", line, line, err, err)  
         switch line {
         case "CLASSIFY\n":
             if parametersLoaded {
-                //SendToClient("Ожидаю строку для классификации")
                 stems, err2 := b.ReadString('\n')
                 if err2 != nil { // EOF, or worse
-                    SendToClient("Invalid parameters\n")
+                    SendToClient("ERROR\nInvalid parameters\n")
                     break
                 }
-                SendToClient(Classify(stems))
+                SendToClient("OK\n" + Classify(stems) + "\n")
             } else {
-                //TODO нормально отправлять ошибку
-                SendToClient("ERROR: SERVER IS NOT READY\n")
+                SendToClient("ERROR\nСервер не готов к работе. Параметры классификатора не загружены\n")
             }
         case "UPDATE\n": 
             //1. список слов
             words, err2 := b.ReadString('\n')
             if err2 != nil { // EOF, or worse
-                SendToClient("Invalid parameters\n")
+                SendToClient("ERROR\nInvalid parameters\n")
                 break
             }
             WriteStringToFile(WORDLIST, words, false)
@@ -165,30 +163,34 @@ func HandleConn(client net.Conn) {
             //2. список классов
             classes, err3 := b.ReadString('\n')
             if err3 != nil { // EOF, or worse
-                SendToClient("Invalid parameters\n")
+                SendToClient("ERROR\nInvalid parameters\n")
                 break
             }
             WriteStringToFile(CLASSLIST, classes, false)
             
-            //3. матрица весов размером (2.) * (1.)
-            WriteStringToFile(WEIGHTS, "", false)
+            //3. матрица весов размером (классы) * (слова)
+            WriteStringToFile(WEIGHTS, "", false) // пересоздать файл
             for {
                 wts, err4 := b.ReadString('\n')
-                if len(wts) == 1 || err4 != nil { // EOF, or worse
+                if err4 != nil {
+                    SendToClient("ERROR\nInvalid parameters\n")
+                    break
+                } else if len(wts) == 1 { // EOF, or worse
                     break
                 }
                 WriteStringToFile(WEIGHTS, wts, true)
             }
             err = LoadParameters()
             if err != nil {
-                SendToClient("ERROR: UPLOADED PARAMETERS WERE NOT LOADED CORRECTLY\n")
-                fmt.Println("Параметры классификатора не загружены. Обновите их с помощью команды UPDATE")
+                SendToClient("ERROR\n" + err.Error())
+                fmt.Println("Параметры классификатора не загружены. Обновите их с помощью команды UPDATE\n" + err.Error())
+                parametersLoaded = false
             } else {
-                SendToClient("updated\n")
+                SendToClient("OK\nUpdated\n")
                 fmt.Println("Параметры классификатора успешно обновлены. Сервер готов к работе!")
             }
         default:
-            SendToClient("Invalid command\n")
+            SendToClient("ERROR\nInvalid command\n")
         }
         
     }
@@ -220,7 +222,8 @@ func Classify(content string) string {
 
     //fmt.Println(counts)
     //fmt.Println(counts_mat)
-    //fmt.Println(res)
+    //fmt.Println(res)     
+    //fmt.Println(res_arr)
     //fmt.Println(classes[min_i])    
     return classes[min_i]
 }
@@ -230,7 +233,7 @@ func main() {
     //Listen создаёт сервер
     server, err := net.Listen("tcp", ":" + strconv.Itoa(PORT))
     if server == nil {
-        panic("couldn't start listening: " + err.Error())
+        panic("Невозможно открыть соединение: " + err.Error())
     }
     
     err = LoadParameters()
