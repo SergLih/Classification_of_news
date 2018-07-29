@@ -1,0 +1,26 @@
+{% extends 'rango/base.html' %}
+{% load staticfiles %}
+
+{% block title_block %}
+    {{article.title}} | {{ category.name }}
+{% endblock %}
+
+{% block body_block %}
+    <h2>{{ article.title }}</h2>
+    <p> {{ article.published }}</p>
+    <div>
+        {{article.text}}
+    </div>
+    <p><a href="{{ article.url }}">Источник</a></p>
+    {% if extra_articles %}
+        <hr/>
+        <h3>Последние новости этого раздела</h3>
+        <ul>
+        {% for ex_article in extra_articles %}
+            <li><a href="{% url 'show_article' category.slug ex_article.slug %}">{{ ex_article.title }}</a></li>               
+        {% endfor %}
+        </ul>
+    {% else %}
+        <strong>No articles currently in category.</strong>
+    {% endif %}
+{% endblock %}

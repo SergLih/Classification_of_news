@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+{% load staticfiles %}
+{% load rango_template_tags %}
+
+<html>
+    <head>
+        <title>
+            {% block title_block %}Главная{% endblock %} | SergioNews
+        </title>
+        <link rel="shortcut icon" href="{% static 'images/favicon.ico' %}">
+        <link rel="stylesheet" href="{% static 'css/normalize.css' %}">
+        <link rel="stylesheet" href="{% static 'css/milligram.css' %}">
+        <link rel="stylesheet" href="{% static 'css/my.css' %}">
+    </head>
+    <body>
+    <div class="container">
+    
+        <div class="clearfix">
+            <br/>
+            <div class="float-left"><a href="{% url 'index' %}" ><h1 class="site-title">Sergio<br/>News</h1></a></div>
+            <div class="cats">
+            {% block sidebar_block %}
+            {% get_category_list category %}
+            {% endblock %}
+            </div>
+        </div>
+    
+        <div>
+            {% block body_block %}
+            {% endblock %}
+        </div>
+        <hr/>
+        <div class="footer">
+            {% if user.is_authenticated %}
+                Вы вошли на сайт как {{ user.username }}. 
+                <a class="button button-clear" href="{% url 'add_article' %}">Добавить новость</a>
+                <a class="button button-clear" href="{% url 'auth_logout' %}?next=/rango/">Выйти</a>
+            {% else %}
+                <a class="button button-clear" href="{% url 'auth_login' %}">Войти</a>
+                <a class="button button-clear" href="{% url 'registration_register' %}">Зарегистрироваться</a>
+            {% endif %}
+        </div>
+    </div>
+    </body>
+</html>

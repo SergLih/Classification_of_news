@@ -1,0 +1,9 @@
+
+{% for c in cats %}
+    {% if c == act_cat %}
+            <a class="button button-outline" href="{% url 'show_category' c.slug %}">{{ c.name }}</a>
+        {% else %}
+            <a class="button" href="{% url 'show_category' c.slug %}">{{ c.name }}</a>
+        {% endif %}
+    {% endfor %}
+

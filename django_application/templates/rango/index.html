@@ -1,0 +1,21 @@
+{% extends 'rango/base.html' %}
+{% load staticfiles %}
+
+{% block title_block %}
+    Главная
+{% endblock %}
+
+{% block body_block %} 
+    <h2>Последние новости на сайте</h2>
+    {% if new_articles %}
+        <ul>
+        {% for ex_article in new_articles %}
+            <li><a href="{% url 'show_article' ex_article.category.slug ex_article.slug %}">{{ ex_article.title }}</a></li>               
+        {% endfor %}
+        </ul>
+    {% else %}
+        <strong>Новостей сейчас на данный момент нет.</strong>
+    {% endif %}
+
+
+{% endblock %}
