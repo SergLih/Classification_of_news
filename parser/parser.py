@@ -80,7 +80,8 @@ def load_source(dt_last_update, rss_url, parser_func):
     news_arr = []
     for entry in tqdm(reversed(d['entries'])):
         dt_object = pd.Timestamp(entry['published']).tz_convert('Europe/Moscow')
-        if dt_object <= dt_last_update:  # пропускаем все уже загруженные новости
+        # пропускаем все уже загруженные новости
+        if dt_last_update is not None and dt_object <= dt_last_update:
             continue
         else:
             news_object = parser_func(entry)
@@ -118,6 +119,7 @@ def update_model(df):
     stemmer = SnowballStemmer("russian") 
     def preprocess_stem(t):
         t = re.sub("[^А-Яа-яЁё]", " ", t.lower())
+        t = t.replace('ё', 'е').replace('Ё', 'Е')
         return list(filter(lambda x: len(x) > 1, (stemmer.stem(w) for w in t.split())))
         
     cats = df['cat'].unique().tolist()
@@ -130,12 +132,13 @@ def update_model(df):
     cat2code = dict(zip(cats, range(len(cats))))
     print(cat2code)
     
-    df['stems'] = (df['title'] + df['text']).apply(preprocess_stem)                            # столбец с основами
-    y = df['cat'].map(cat2code)                                                                # коды категорий
+    df['stems'] = (df['title'] + df['text']).apply(preprocess_stem)   # столбец с основами
+    y = df['cat'].map(cat2code)                                       # коды категорий
     
-    df_counts = pd.DataFrame(df['stems'].apply(lambda x: dict(Counter(x))).tolist()).fillna(0) # подсчёт встречаемости слов
+    # подсчёт встречаемости слов
+    df_counts = pd.DataFrame(df['stems'].apply(lambda x: dict(Counter(x))).tolist()).fillna(0)
     print('Общее количество слов:     ', df_counts.shape[1])
-    ind = np.where((df_counts > 0).sum(axis=0) >= 2)[0]                  # хотя бы в двух документах
+    ind = np.where((df_counts > 0).sum(axis=0) >= 2)[0]               # хотя бы в двух документах
     vocab = sorted(set(df_counts.columns[ind]) - get_stop_words())
     d = df_counts.loc[:, vocab].values
     print('Количество отобранных слов:', len(vocab))
@@ -143,12 +146,17 @@ def update_model(df):
     with open('./words.txt', 'w') as f:
         f.write(' '.join(vocab))
 
-    d = np.log(d + 1)                               # 1. TF-преобразование (частота слова в документах)
-    d *= np.log(d.shape[0] / ((d > 0).sum(axis=0))) # 2. IDF преобразование (количество появлений каждого слова в документах)
-    d = (d.T / np.sqrt((d**2).sum(axis=1))).T       # 3. Нормализация на длину документов
+    # 1. TF-преобразование (частота слова в документах)
+    d = np.log(d + 1)
+    # 2. IDF преобразование (количество появлений каждого слова в документах)
+    d *= np.log(d.shape[0] / ((d > 0).sum(axis=0)))
+    # 3. Нормализация на длину документов
+    d = (d.T / np.sqrt((d**2).sum(axis=1))).T
 
-    psi = np.zeros((len(cats), len(vocab)))         # 4. Мы хотим каждому слову приписать вероятность быть обнаруженным в тексте класса с. 
-                                                    #    Делаем это через дополнение по классам -- то есть смотрим на слова в документах остальных классов
+    # 4. Мы хотим каждому слову приписать вероятность быть обнаруженным в тексте класса с.
+    #    Делаем это через дополнение по классам -- то есть смотрим на слова в документах остальных классов 
+    psi = np.zeros((len(cats), len(vocab)))
+
     for cat in tqdm(range(len(cats))):
         d_compl = d[np.where(y!=cat)[0], :]
         denom = d_compl.sum() + len(vocab) * 0.1
@@ -172,15 +180,22 @@ def update_model(df):
 
 
 def main():
-
+    
+    # пустой датафрейм с типами данных на случай отсутствия базы данных
+    empty_data = dict(zip(['title', 'text', 'url', 'source', 'cat'], [pd.Series(dtype="O")]*5)) 
+    empty_data['dt'] = pd.Series(dtype='datetime64[ns]')
+    df = pd.DataFrame(empty_data)
+    
+    emptyDatabase = True
+    
     while True:
         try:
             df = pd.read_csv(NEWS_FILE, error_bad_lines=False, parse_dates=['dt'] )
             df['dt'] = df['dt'].dt.tz_localize('UTC').dt.tz_convert('Europe/Moscow')
+            emptyDatabase = False
         except:
-            newFile = input("Не могу открыть файл с базой данных новостей. Создать новый? (y/n)")
-            if newFile == 'y':
-                df = pd.DataFrame()
+            print('Файл с базой данных новостей отсутствует. Будет создан новый файл.')
+                
                 
         sources = [('http://tass.ru/rss/v2.xml', parse_tass), 
                    ('https://tvkultura.ru/rss/yandex/', parse_tvkultura),
@@ -188,7 +203,7 @@ def main():
 
         for url, parser in sources:
             source = source_from_url(url)
-            dt_last_update = df.query('source == @source')['dt'].max()
+            dt_last_update = None if emptyDatabase else df.query('source == @source')['dt'].max()
             print('Источник: {} | Последнее обновление {} | Загрузка новостей...'.format(source, dt_last_update))
             news_arr = load_source(dt_last_update, url, parser)
             if news_arr:
@@ -197,6 +212,9 @@ def main():
             else:
                 print('Источник: {} | Свежих новостей нет'.format(source))
 
+        if emptyDatabase:
+            emptyDatabase = False
+            
         df.dropna(inplace=True)  # для новостей с непрогрузившимся текстом
         df.to_csv(NEWS_FILE, index=False, compression='gzip')
         update_model(df)
